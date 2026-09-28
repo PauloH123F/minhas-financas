@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#07111f">
+<meta name="description" content="Minhas Finanças — organização financeira simples, clara e prática.">
+<title>Minhas Finanças — Seu dinheiro sob controle</title>
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+:root{--bg:#07111f;--panel:#0e1b2d;--panel2:#12243a;--text:#f7fbff;--muted:#a9b8c9;--green:#39d98a;--blue:#3ea6ff;--gold:#f7c948;--line:#20334c}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:linear-gradient(180deg,#07111f,#0a1728 55%,#07111f);color:var(--text);line-height:1.5}.wrap{width:min(1080px,92%);margin:auto}a{text-decoration:none;color:inherit}
+nav{height:72px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #ffffff12}.brand{display:flex;align-items:center;gap:10px;font-weight:800}.mark{width:42px;height:42px;border-radius:12px;background:#102b45;display:grid;place-items:center}.bars{display:flex;gap:3px;align-items:end;height:22px}.bars i{display:block;width:5px;border-radius:3px;background:var(--blue)}.bars i:nth-child(1){height:8px}.bars i:nth-child(2){height:13px}.bars i:nth-child(3){height:18px;background:var(--green)}.navbtn,.btn{padding:12px 18px;border:1px solid #29415c;border-radius:13px;font-weight:800}.navbtn{color:#dcecff}
+.hero{text-align:center;padding:70px 0 55px}.pill{display:inline-block;padding:7px 12px;border:1px solid #28506d;border-radius:999px;color:#bce8ff;background:#0c2236;font-size:13px;font-weight:700}.hero h1{font-size:clamp(38px,8vw,68px);line-height:1.03;margin:18px auto;max-width:850px;letter-spacing:-2px}.hero h1 span{color:var(--green)}.hero p{max-width:700px;margin:auto;color:var(--muted);font-size:18px}.actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin:28px 0 14px}.primary{background:var(--green);color:#06130d;border-color:var(--green)}.secondary{background:#102137}.small{font-size:13px;color:#8294a9}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:25px 0 65px}.stat,.card,.mock,.price,.quote{background:linear-gradient(180deg,#0e1b2d,#0b1727);border:1px solid var(--line);border-radius:20px}.stat{padding:20px}.stat b{display:block;font-size:24px}.stat span{color:var(--muted);font-size:14px}
+section{padding:35px 0 70px}.sectiontitle{text-align:center;max-width:700px;margin:0 auto 32px}.sectiontitle h2{font-size:34px;margin:0 0 8px}.sectiontitle p{color:var(--muted);margin:0}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.card{padding:24px}.ico{font-size:28px}.card h3{margin:12px 0 7px}.card p{color:var(--muted);margin:0}
+.demo{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:center}.mock{padding:18px;box-shadow:0 20px 60px #0005}.mockhead{display:flex;justify-content:space-between;color:#9fb2c7;font-size:13px}.balance{font-size:35px;font-weight:850;margin:10px 0 16px}.row{display:flex;justify-content:space-between;padding:12px 0;border-top:1px solid #1c3048}.green{color:var(--green)}.yellow{color:var(--gold)}
+.quote{text-align:center;padding:30px;background:linear-gradient(135deg,#10263a,#0d1b2d);border-color:#284b62}.quote h2{font-size:32px;margin:0 0 8px}.quote p{color:var(--muted);max-width:650px;margin:0 auto 20px}
+.price{max-width:440px;margin:auto;text-align:center;padding:30px;border-color:#31516a}.price .value{font-size:48px;font-weight:900}.price small{color:var(--muted)}.price ul{text-align:left;color:#d9e4ef;list-style:none;padding:0;margin:20px 0}.price li{padding:7px 0}.price li:before{content:"✓";color:var(--green);font-weight:900;margin-right:8px}
+footer{padding:35px 0 55px;color:#8192a7;text-align:center;border-top:1px solid #ffffff12;font-size:13px}
+.modal{position:fixed;inset:0;background:#0009;display:none;align-items:center;justify-content:center;padding:22px;z-index:20}.modal.show{display:flex}.modalbox{max-width:430px;width:100%;background:#0e1b2d;border:1px solid #31516a;border-radius:20px;padding:26px;text-align:center;box-shadow:0 25px 80px #0008}.modalbox h3{margin:0 0 8px;font-size:24px}.modalbox p{color:var(--muted);margin:0 0 20px}.modalclose{display:inline-block;cursor:pointer}.modal-note{font-size:12px;color:#8192a7;margin-top:12px}
+@media(max-width:760px){.grid,.stats,.demo{grid-template-columns:1fr}.hero{padding-top:48px}.navbtn{display:none}.hero p{font-size:16px}.sectiontitle h2{font-size:29px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+<a class="brand" href="#"><span class="mark"><span class="bars"><i></i><i></i><i></i></span></span><span>Minhas Finanças</span></a>
+<a class="navbtn" href="#preco">Conheça o plano</a>
+</nav>
+
+<header class="hero">
+<span class="pill">ORGANIZAÇÃO FINANCEIRA SEM COMPLICAÇÃO</span>
+<h1>Seu dinheiro merece um plano.<br><span>Você merece tranquilidade.</span></h1>
+<p>Saiba quanto entra, quanto sai, quanto pode gastar e acompanhe suas dívidas e metas em um só lugar.</p>
+<div class="actions"><a class="btn primary" href="#preco">Quero organizar minhas finanças</a><a class="btn secondary" href="#como">Como funciona</a></div>
+<div class="small">Sem senha bancária. Sem conexão automática com seu banco.</div>
+</header>
+
+<div class="stats">
+<div class="stat"><b>💰 Clareza</b><span>Veja quanto realmente está disponível.</span></div>
+<div class="stat"><b>🎯 Controle</b><span>Acompanhe metas e dívidas sem complicação.</span></div>
+<div class="stat"><b>🧠 Decisão</b><span>Veja como um novo gasto afeta sua margem.</span></div>
+</div>
+
+<section id="como">
+<div class="sectiontitle"><h2>Feito para a vida real</h2><p>Você não precisa ser especialista em finanças. O app transforma seus números em uma visão simples.</p></div>
+<div class="grid">
+<article class="card"><div class="ico">📊</div><h3>Saiba para onde vai seu dinheiro</h3><p>Registre entradas e saídas e enxergue as principais categorias do mês.</p></article>
+<article class="card"><div class="ico">📉</div><h3>Organize suas dívidas</h3><p>Cadastre saldo, parcela e pagamentos e acompanhe a evolução.</p></article>
+<article class="card"><div class="ico">🎯</div><h3>Transforme planos em metas</h3><p>Defina um objetivo, registre o que guardou e acompanhe o progresso.</p></article>
+<article class="card"><div class="ico">💳</div><h3>Tenha seus cartões à vista</h3><p>Controle limite, utilização e compromissos futuros.</p></article>
+<article class="card"><div class="ico">🤔</div><h3>“Posso gastar?”</h3><p>Simule um gasto antes da compra e veja o impacto no seu orçamento.</p></article>
+<article class="card"><div class="ico">🔐</div><h3>Privacidade em primeiro lugar</h3><p>Não precisamos de senha bancária nem de número de cartão para ajudar você.</p></article>
+</div>
+</section>
+
+<section>
+<div class="demo">
+<div>
+<div class="sectiontitle" style="text-align:left;margin:0"><h2>Uma visão que você entende em segundos.</h2><p>O objetivo não é complicar sua vida com dezenas de telas. É ajudar você a responder: “Quanto eu tenho?”, “Quanto posso gastar?” e “Estou chegando às minhas metas?”</p></div>
+<div class="actions" style="justify-content:flex-start"><a class="btn primary" href="#preco">Quero começar</a></div>
+</div>
+<div class="mock">
+<div class="mockhead"><span>Resumo do mês</span><span>Setembro</span></div>
+<div class="balance">R$ 2.050,00</div>
+<div class="row"><span>📥 Entradas</span><b class="green">R$ 5.000</b></div>
+<div class="row"><span>📤 Gastos</span><b>R$ 1.750</b></div>
+<div class="row"><span>📉 Compromissos</span><b class="yellow">R$ 1.200</b></div>
+<div class="row"><span>🎯 Metas</span><b class="green">35%</b></div>
+</div>
+</div>
+</section>
+
+<section><div class="quote"><h2>Menos preocupação. Mais controle.</h2><p>Uma ferramenta simples para quem quer colocar a vida financeira em ordem sem planilhas complicadas.</p><a class="btn primary" href="#preco">Quero conhecer</a></div></section>
+
+<section id="preco">
+<div class="sectiontitle"><h2>Comece simples</h2><p>Uma oferta inicial enxuta para organizar sua vida financeira.</p></div>
+<div class="price">
+<div>MINHAS FINANÇAS</div>
+<div class="value">R$ 9,90<small>/mês</small></div>
+<ul>
+<li>Controle de entradas e saídas</li><li>Metas e progresso</li><li>Dívidas e pagamentos</li><li>Cartões e compromissos</li><li>Simulação “Posso gastar?”</li><li>Backup dos seus dados</li>
+</ul>
+<a class="btn primary" style="width:100%;font-size:17px;padding:15px 18px" href="#" id="checkoutBtn">Assinar por R$ 9,90/mês</a>
+<div class="small" style="margin-top:12px">Pagamento seguro por checkout externo. O link de pagamento será conectado aqui.</div>
+</div>
+</section>
+
+<footer>© 2026 Minhas Finanças · Organização financeira simples, clara e responsável.</footer>
+</div>
+<div class="modal" id="checkoutModal" role="dialog" aria-modal="true" aria-labelledby="checkoutTitle">
+  <div class="modalbox">
+    <h3 id="checkoutTitle">Pagamento do Minhas Finanças</h3>
+    <p>O botão já está preparado para o checkout. Assim que você tiver o link de pagamento, ele será conectado aqui.</p>
+    <a class="btn secondary modalclose" href="#preco" id="closeCheckout">Fechar</a>
+    <div class="modal-note">R$ 9,90 por mês · assinatura externa</div>
+  </div>
+</div>
+<script>
+const checkoutBtn=document.getElementById('checkoutBtn');
+const checkoutModal=document.getElementById('checkoutModal');
+const closeCheckout=document.getElementById('closeCheckout');
+checkoutBtn.addEventListener('click',function(e){
+  e.preventDefault();
+  checkoutModal.classList.add('show');
+});
+closeCheckout.addEventListener('click',function(){checkoutModal.classList.remove('show');});
+checkoutModal.addEventListener('click',function(e){if(e.target===checkoutModal)checkoutModal.classList.remove('show');});
+</script>
+</body>
+</html>
