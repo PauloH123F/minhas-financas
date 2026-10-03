@@ -1,52 +1,157 @@
 /**
- * Minhas Finanças — Backend
+ * MINHAS FINANÇAS PRO
  * Cloudflare Worker + Mercado Pago + Cloudflare KV
+ *
+ * Versão 3.0
+ *
+ * Funções:
+ * - Webhook Mercado Pago
+ * - Validação da assinatura do webhook
+ * - Pagamentos
+ * - Assinaturas
+ * - Faturas recorrentes
+ * - Cloudflare KV
+ * - Consulta de acesso Pro
+ * - Página de retorno do Mercado Pago
+ * - CORS para o aplicativo
+ *
+ * IMPORTANTE:
+ * MP_ACCESS_TOKEN e MP_WEBHOOK_SECRET ficam somente
+ * nos Secrets do Cloudflare.
  */
+
+const APP_URL =
+  "https://pauloh123f.github.io/minhas-financas/";
+
+const CHECKOUT_URL =
+  "https://mpago.la/33i4rah";
+
+const KV_TTL =
+  60 * 60 * 24 * 400;
+
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    if (request.method === "GET" && url.pathname === "/") {
-      return json({
+    /*
+     * CORS
+     */
+    if (request.method === "OPTIONS") {
+      return corsResponse(null, 204);
+    }
+
+    /*
+     * HEALTH CHECK
+     */
+    if (
+      request.method === "GET" &&
+      url.pathname === "/"
+    ) {
+      return corsJson({
         ok: true,
         service: "minhas-financas-backend",
-        version: "2.0.0",
+        version: "3.0.0",
       });
     }
 
+    /*
+     * WEBHOOK MERCADO PAGO
+     */
     if (
       request.method === "POST" &&
       url.pathname === "/webhook/mercadopago"
     ) {
-      return handleMercadoPagoWebhook(request, env);
+      return handleMercadoPagoWebhook(
+        request,
+        env
+      );
     }
 
-    if (request.method === "GET" && url.pathname === "/acesso") {
+    /*
+     * RETORNO APÓS CHECKOUT
+     */
+    if (
+      request.method === "GET" &&
+      url.pathname === "/acesso"
+    ) {
       return handleAccessPage(url, env);
     }
 
-    if (request.method === "GET" && url.pathname === "/status") {
-      return handleStatus(url, env);
+    /*
+     * STATUS DE PAGAMENTO
+     */
+    if (
+      request.method === "GET" &&
+      url.pathname === "/status"
+    ) {
+      return handlePaymentStatus(url, env);
     }
 
-    return new Response("Not found", { status: 404 });
+    /*
+     * STATUS PRO POR E-MAIL
+     *
+     * Esta rota NÃO libera acesso apenas porque
+     * alguém informou um e-mail.
+     *
+     * Ela somente informa se existe uma assinatura
+     * registrada e válida para esse e-mail.
+     */
+    if (
+      request.method === "GET" &&
+      url.pathname === "/pro/status"
+    ) {
+      return handleProStatus(url, env);
+    }
+
+    /*
+     * LINK DO CHECKOUT
+     */
+    if (
+      request.method === "GET" &&
+      url.pathname === "/checkout"
+    ) {
+      return Response.redirect(
+        CHECKOUT_URL,
+        302
+      );
+    }
+
+    return corsJson(
+      {
+        ok: false,
+        error: "Not found",
+      },
+      404
+    );
   },
 };
 
 
-async function handleMercadoPagoWebhook(request, env) {
-  const bodyText = await request.text();
+/* =========================================================
+   WEBHOOK
+========================================================= */
+
+async function handleMercadoPagoWebhook(
+  request,
+  env
+) {
+  const bodyText =
+    await request.text();
 
   let body = {};
 
   try {
-    body = bodyText ? JSON.parse(bodyText) : {};
+    body =
+      bodyText
+        ? JSON.parse(bodyText)
+        : {};
   } catch {
     body = {};
   }
 
-  const url = new URL(request.url);
+  const url =
+    new URL(request.url);
 
   const resourceId =
     body?.data?.id ||
@@ -60,53 +165,61 @@ async function handleMercadoPagoWebhook(request, env) {
     "unknown";
 
   console.log(
-    "Webhook Mercado Pago:",
+    "Mercado Pago webhook:",
     eventType,
     resourceId || "sem-id"
   );
 
   /*
-   * Algumas notificações podem não trazer um ID utilizável.
-   * Confirmamos o recebimento para evitar retries desnecessários.
+   * Confirma notificações sem ID para
+   * evitar retries desnecessários.
    */
   if (!resourceId) {
-    return json({
+    return corsJson({
       ok: true,
       received: true,
       type: eventType,
-      message: "Webhook recebido sem resource_id.",
+      message:
+        "Webhook recebido sem resource_id.",
     });
   }
 
   if (!env.MP_ACCESS_TOKEN) {
-    console.error("MP_ACCESS_TOKEN não configurado.");
+    console.error(
+      "MP_ACCESS_TOKEN não configurado."
+    );
 
-    return json(
+    return corsJson(
       {
         ok: false,
-        error: "Configuração do Mercado Pago ausente.",
+        error:
+          "Configuração Mercado Pago ausente.",
       },
       500
     );
   }
 
   /*
-   * Validação da assinatura do webhook.
+   * VALIDAÇÃO DO WEBHOOK
    */
   if (env.MP_WEBHOOK_SECRET) {
-    const valid = await validateMercadoPagoSignature(
-      request,
-      resourceId,
-      env.MP_WEBHOOK_SECRET
-    );
+    const valid =
+      await validateMercadoPagoSignature(
+        request,
+        resourceId,
+        env.MP_WEBHOOK_SECRET
+      );
 
     if (!valid) {
-      console.error("Assinatura do webhook inválida.");
+      console.error(
+        "Assinatura webhook inválida."
+      );
 
-      return json(
+      return corsJson(
         {
           ok: false,
-          error: "Assinatura do webhook inválida.",
+          error:
+            "Assinatura do webhook inválida.",
         },
         401
       );
@@ -114,315 +227,890 @@ async function handleMercadoPagoWebhook(request, env) {
   }
 
   /*
-   * EVENTO: PAGAMENTO
-   *
-   * Este é o evento que efetivamente pode liberar acesso.
+   * PAGAMENTO
    */
   if (eventType === "payment") {
-    return processPayment(resourceId, env);
+    return processPayment(
+      resourceId,
+      env
+    );
   }
 
   /*
-   * EVENTO: ASSINATURA
+   * ASSINATURA
    */
-  if (eventType === "subscription_preapproval") {
-    return processSubscription(resourceId, env);
+  if (
+    eventType ===
+    "subscription_preapproval"
+  ) {
+    return processSubscription(
+      resourceId,
+      env
+    );
   }
 
   /*
-   * EVENTO: FATURA / COBRANÇA RECORRENTE
+   * FATURA RECORRENTE
    */
-  if (eventType === "subscription_authorized_payment") {
-    return processAuthorizedPayment(resourceId, env);
+  if (
+    eventType ===
+    "subscription_authorized_payment"
+  ) {
+    return processAuthorizedPayment(
+      resourceId,
+      env
+    );
   }
 
   /*
-   * EVENTO: PLANO
+   * ALTERAÇÃO DO PLANO
    *
-   * Não libera usuário.
-   * Apenas confirmamos que recebemos.
+   * Não muda acesso do cliente.
    */
-  if (eventType === "subscription_preapproval_plan") {
-    return json({
+  if (
+    eventType ===
+    "subscription_preapproval_plan"
+  ) {
+    return corsJson({
       ok: true,
       received: true,
       type: eventType,
-      resource_id: String(resourceId),
-      message: "Notificação do plano recebida.",
+      resource_id:
+        String(resourceId),
     });
   }
 
   /*
-   * Evento que ainda não utilizamos.
-   * Respondemos 200 para confirmar recebimento.
+   * EVENTO NÃO UTILIZADO
    */
-  return json({
+  return corsJson({
     ok: true,
     received: true,
     type: eventType,
-    resource_id: String(resourceId),
-    message: "Evento recebido.",
+    resource_id:
+      String(resourceId),
   });
 }
 
 
-async function processPayment(paymentId, env) {
-  const result = await mercadoPagoGet(
-    `/v1/payments/${encodeURIComponent(paymentId)}`,
-    env
-  );
+/* =========================================================
+   PAGAMENTO
+========================================================= */
+
+async function processPayment(
+  paymentId,
+  env
+) {
+  const result =
+    await mercadoPagoGet(
+      `/v1/payments/${encodeURIComponent(
+        paymentId
+      )}`,
+      env
+    );
 
   /*
-   * O simulador do Mercado Pago pode usar um ID fictício.
-   * Nesse caso a API retorna 404.
-   *
-   * O webhook funcionou; simplesmente não existe um pagamento
-   * real para consultar.
+   * O simulador pode usar ID inexistente.
    */
   if (result.status === 404) {
     console.log(
-      "Pagamento não encontrado. Possível ID do simulador:",
+      "Pagamento não encontrado:",
       paymentId
     );
 
-    return json({
+    return corsJson({
       ok: true,
       received: true,
       simulated_or_not_found: true,
       type: "payment",
-      resource_id: String(paymentId),
+      resource_id:
+        String(paymentId),
     });
   }
 
   if (!result.ok) {
     console.error(
-      "Erro consultando pagamento:",
+      "Erro pagamento MP:",
       result.status,
       result.text
     );
 
-    return json(
+    return corsJson(
       {
         ok: false,
-        error: "Erro temporário consultando o Mercado Pago.",
+        error:
+          "Erro temporário consultando pagamento.",
       },
       502
     );
   }
 
-  const payment = result.data;
+  const payment =
+    result.data;
 
-  const approved = payment?.status === "approved";
+  const approved =
+    payment?.status === "approved";
+
+  const email =
+    normalizeEmail(
+      payment?.payer?.email
+    );
 
   const record = {
-    payment_id: String(payment.id),
-    status: payment.status || null,
-    status_detail: payment.status_detail || null,
-    amount: payment.transaction_amount || null,
-    currency: payment.currency_id || null,
-    payer_email: payment.payer?.email || null,
-    external_reference: payment.external_reference || null,
-    date_approved: payment.date_approved || null,
-    updated_at: new Date().toISOString(),
+    payment_id:
+      String(payment.id),
+
+    status:
+      payment.status || null,
+
+    status_detail:
+      payment.status_detail || null,
+
+    amount:
+      payment.transaction_amount ??
+      null,
+
+    currency:
+      payment.currency_id || null,
+
+    payer_email:
+      email || null,
+
+    external_reference:
+      payment.external_reference ||
+      null,
+
+    date_approved:
+      payment.date_approved || null,
+
+    updated_at:
+      new Date().toISOString(),
+
     approved,
   };
 
+  /*
+   * Registro pelo ID do pagamento.
+   */
   await env.PAYMENTS.put(
     `payment:${payment.id}`,
     JSON.stringify(record),
     {
-      expirationTtl: 60 * 60 * 24 * 400,
+      expirationTtl: KV_TTL,
     }
   );
 
   /*
-   * Também guardamos o último pagamento pelo e-mail.
-   * Isso será útil na próxima etapa para liberar o cliente
-   * sem depender do payment_id na URL.
+   * Guarda também o último pagamento
+   * conhecido pelo e-mail.
    */
-  if (payment.payer?.email) {
-    const email = String(payment.payer.email)
-      .trim()
-      .toLowerCase();
-
+  if (email) {
     await env.PAYMENTS.put(
-      `email:${email}`,
+      `payment-email:${email}`,
       JSON.stringify(record),
       {
-        expirationTtl: 60 * 60 * 24 * 400,
+        expirationTtl: KV_TTL,
       }
     );
   }
 
-  return json({
+  return corsJson({
     ok: true,
     received: true,
     type: "payment",
-    payment_id: String(payment.id),
-    status: payment.status || null,
+    payment_id:
+      String(payment.id),
+    status:
+      payment.status || null,
     approved,
   });
 }
 
 
-async function processSubscription(subscriptionId, env) {
-  /*
-   * O endpoint individual é adequado quando temos
-   * o ID específico da assinatura.
-   */
-  const result = await mercadoPagoGet(
-    `/preapproval/${encodeURIComponent(subscriptionId)}`,
-    env
-  );
+/* =========================================================
+   ASSINATURA
+========================================================= */
 
+async function processSubscription(
+  subscriptionId,
+  env
+) {
+  const result =
+    await mercadoPagoGet(
+      `/preapproval/${encodeURIComponent(
+        subscriptionId
+      )}`,
+      env
+    );
+
+  /*
+   * Permite que o simulador continue
+   * retornando HTTP 200 com ID fictício.
+   */
   if (result.status === 404) {
     console.log(
-      "Assinatura não encontrada. Possível ID do simulador:",
+      "Assinatura não encontrada:",
       subscriptionId
     );
 
-    return json({
+    return corsJson({
       ok: true,
       received: true,
       simulated_or_not_found: true,
-      type: "subscription_preapproval",
-      resource_id: String(subscriptionId),
+      type:
+        "subscription_preapproval",
+      resource_id:
+        String(subscriptionId),
     });
   }
 
   if (!result.ok) {
     console.error(
-      "Erro consultando assinatura:",
+      "Erro assinatura MP:",
       result.status,
       result.text
     );
 
-    return json(
+    return corsJson(
       {
         ok: false,
-        error: "Erro temporário consultando assinatura.",
+        error:
+          "Erro temporário consultando assinatura.",
       },
       502
     );
   }
 
-  const subscription = result.data;
+  const subscription =
+    result.data;
+
+  const email =
+    normalizeEmail(
+      subscription?.payer_email
+    );
+
+  /*
+   * Para o estado da assinatura,
+   * authorized representa assinatura
+   * autorizada/ativa.
+   */
+  const active =
+    subscription?.status ===
+    "authorized";
 
   const record = {
-    subscription_id: String(subscription.id),
-    status: subscription.status || null,
-    payer_email: subscription.payer_email || null,
-    external_reference:
-      subscription.external_reference || null,
+    subscription_id:
+      String(subscription.id),
+
+    status:
+      subscription.status || null,
+
+    active,
+
+    payer_email:
+      email || null,
+
+    payer_id:
+      subscription.payer_id
+        ? String(
+            subscription.payer_id
+          )
+        : null,
+
     preapproval_plan_id:
-      subscription.preapproval_plan_id || null,
-    reason: subscription.reason || null,
-    updated_at: new Date().toISOString(),
+      subscription.preapproval_plan_id ||
+      null,
+
+    external_reference:
+      subscription.external_reference ||
+      null,
+
+    reason:
+      subscription.reason || null,
+
+    date_created:
+      subscription.date_created ||
+      null,
+
+    updated_at:
+      new Date().toISOString(),
   };
 
+  /*
+   * Guarda assinatura por ID.
+   */
   await env.PAYMENTS.put(
     `subscription:${subscription.id}`,
     JSON.stringify(record),
     {
-      expirationTtl: 60 * 60 * 24 * 400,
+      expirationTtl: KV_TTL,
     }
   );
 
-  return json({
+  /*
+   * Guarda estado da assinatura
+   * também pelo e-mail.
+   *
+   * Se o Mercado Pago posteriormente
+   * enviar paused/cancelled, esse registro
+   * será sobrescrito e o Pro deixa de
+   * aparecer como ativo.
+   */
+  if (email) {
+    await env.PAYMENTS.put(
+      `subscription-email:${email}`,
+      JSON.stringify(record),
+      {
+        expirationTtl: KV_TTL,
+      }
+    );
+  }
+
+  return corsJson({
     ok: true,
     received: true,
-    type: "subscription_preapproval",
-    subscription_id: String(subscription.id),
-    status: subscription.status || null,
+    type:
+      "subscription_preapproval",
+
+    subscription_id:
+      String(subscription.id),
+
+    status:
+      subscription.status || null,
+
+    active,
   });
 }
 
 
-async function processAuthorizedPayment(invoiceId, env) {
-  const result = await mercadoPagoGet(
-    `/authorized_payments/${encodeURIComponent(invoiceId)}`,
-    env
-  );
+/* =========================================================
+   FATURA DA ASSINATURA
+========================================================= */
+
+async function processAuthorizedPayment(
+  invoiceId,
+  env
+) {
+  const result =
+    await mercadoPagoGet(
+      `/authorized_payments/${encodeURIComponent(
+        invoiceId
+      )}`,
+      env
+    );
 
   if (result.status === 404) {
     console.log(
-      "Fatura não encontrada. Possível ID do simulador:",
+      "Fatura não encontrada:",
       invoiceId
     );
 
-    return json({
+    return corsJson({
       ok: true,
       received: true,
       simulated_or_not_found: true,
-      type: "subscription_authorized_payment",
-      resource_id: String(invoiceId),
+      type:
+        "subscription_authorized_payment",
+      resource_id:
+        String(invoiceId),
     });
   }
 
   if (!result.ok) {
     console.error(
-      "Erro consultando fatura:",
+      "Erro fatura MP:",
       result.status,
       result.text
     );
 
-    return json(
+    return corsJson(
       {
         ok: false,
-        error: "Erro temporário consultando fatura.",
+        error:
+          "Erro temporário consultando fatura.",
       },
       502
     );
   }
 
-  const invoice = result.data;
+  const invoice =
+    result.data;
+
+  const paymentId =
+    invoice?.payment?.id
+      ? String(
+          invoice.payment.id
+        )
+      : null;
+
+  const paymentApproved =
+    invoice?.payment?.status ===
+    "approved";
 
   const record = {
-    authorized_payment_id: String(invoice.id),
-    status: invoice.status || null,
-    preapproval_id: invoice.preapproval_id || null,
-    payment_id: invoice.payment?.id
-      ? String(invoice.payment.id)
-      : null,
-    updated_at: new Date().toISOString(),
+    authorized_payment_id:
+      String(invoice.id),
+
+    preapproval_id:
+      invoice.preapproval_id ||
+      null,
+
+    external_reference:
+      invoice.external_reference ||
+      null,
+
+    status:
+      invoice.status || null,
+
+    summarized:
+      invoice.summarized || null,
+
+    amount:
+      invoice.transaction_amount ??
+      null,
+
+    currency:
+      invoice.currency_id || null,
+
+    payment_id:
+      paymentId,
+
+    payment_status:
+      invoice?.payment?.status ||
+      null,
+
+    payment_status_detail:
+      invoice?.payment
+        ?.status_detail || null,
+
+    payment_approved:
+      paymentApproved,
+
+    updated_at:
+      new Date().toISOString(),
   };
 
   await env.PAYMENTS.put(
     `invoice:${invoice.id}`,
     JSON.stringify(record),
     {
-      expirationTtl: 60 * 60 * 24 * 400,
+      expirationTtl: KV_TTL,
     }
   );
 
-  return json({
+  /*
+   * Relaciona a assinatura à fatura.
+   */
+  if (invoice.preapproval_id) {
+    await env.PAYMENTS.put(
+      `last-invoice:${invoice.preapproval_id}`,
+      JSON.stringify(record),
+      {
+        expirationTtl: KV_TTL,
+      }
+    );
+  }
+
+  /*
+   * Se a fatura contém um pagamento,
+   * consulta o pagamento real para
+   * armazenar também e-mail e demais
+   * informações.
+   */
+  if (paymentId) {
+    const paymentResult =
+      await mercadoPagoGet(
+        `/v1/payments/${encodeURIComponent(
+          paymentId
+        )}`,
+        env
+      );
+
+    if (paymentResult.ok) {
+      const payment =
+        paymentResult.data;
+
+      const email =
+        normalizeEmail(
+          payment?.payer?.email
+        );
+
+      const approved =
+        payment?.status ===
+        "approved";
+
+      const paymentRecord = {
+        payment_id:
+          String(payment.id),
+
+        status:
+          payment.status || null,
+
+        status_detail:
+          payment.status_detail ||
+          null,
+
+        amount:
+          payment.transaction_amount ??
+          null,
+
+        currency:
+          payment.currency_id || null,
+
+        payer_email:
+          email || null,
+
+        external_reference:
+          payment.external_reference ||
+          null,
+
+        date_approved:
+          payment.date_approved ||
+          null,
+
+        subscription_id:
+          invoice.preapproval_id ||
+          null,
+
+        updated_at:
+          new Date().toISOString(),
+
+        approved,
+      };
+
+      await env.PAYMENTS.put(
+        `payment:${payment.id}`,
+        JSON.stringify(
+          paymentRecord
+        ),
+        {
+          expirationTtl: KV_TTL,
+        }
+      );
+
+      if (email) {
+        await env.PAYMENTS.put(
+          `payment-email:${email}`,
+          JSON.stringify(
+            paymentRecord
+          ),
+          {
+            expirationTtl:
+              KV_TTL,
+          }
+        );
+      }
+    }
+  }
+
+  return corsJson({
     ok: true,
     received: true,
-    type: "subscription_authorized_payment",
-    resource_id: String(invoice.id),
-    status: invoice.status || null,
+
+    type:
+      "subscription_authorized_payment",
+
+    resource_id:
+      String(invoice.id),
+
+    subscription_id:
+      invoice.preapproval_id ||
+      null,
+
+    payment_id:
+      paymentId,
+
+    payment_approved:
+      paymentApproved,
   });
 }
 
 
-async function mercadoPagoGet(path, env) {
-  const response = await fetch(
-    `https://api.mercadopago.com${path}`,
-    {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${env.MP_ACCESS_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-    }
-  );
+/* =========================================================
+   STATUS PRO
+========================================================= */
 
-  const text = await response.text();
+async function handleProStatus(
+  url,
+  env
+) {
+  const email =
+    normalizeEmail(
+      url.searchParams.get("email")
+    );
+
+  if (!email) {
+    return corsJson(
+      {
+        ok: false,
+        pro: false,
+        error:
+          "E-mail obrigatório.",
+      },
+      400
+    );
+  }
+
+  const subscription =
+    await env.PAYMENTS.get(
+      `subscription-email:${email}`,
+      "json"
+    );
+
+  const payment =
+    await env.PAYMENTS.get(
+      `payment-email:${email}`,
+      "json"
+    );
+
+  /*
+   * Critério conservador:
+   *
+   * - assinatura precisa estar authorized
+   * - precisa existir pagamento approved
+   *
+   * Assim uma assinatura apenas criada,
+   * mas ainda não paga, não libera Pro.
+   */
+  const subscriptionActive =
+    subscription?.status ===
+    "authorized";
+
+  const paymentApproved =
+    payment?.status ===
+    "approved";
+
+  const pro =
+    Boolean(
+      subscriptionActive &&
+      paymentApproved
+    );
+
+  return corsJson({
+    ok: true,
+    pro,
+
+    subscription_status:
+      subscription?.status ||
+      null,
+
+    payment_status:
+      payment?.status ||
+      null,
+
+    subscription_id:
+      subscription?.subscription_id ||
+      null,
+
+    checked_at:
+      new Date().toISOString(),
+  });
+}
+
+
+/* =========================================================
+   STATUS DE PAGAMENTO
+========================================================= */
+
+async function handlePaymentStatus(
+  url,
+  env
+) {
+  const paymentId =
+    url.searchParams.get(
+      "payment_id"
+    );
+
+  if (!paymentId) {
+    return corsJson(
+      {
+        ok: false,
+        error:
+          "payment_id obrigatório",
+      },
+      400
+    );
+  }
+
+  const record =
+    await env.PAYMENTS.get(
+      `payment:${paymentId}`,
+      "json"
+    );
+
+  return corsJson({
+    ok: true,
+    payment_id:
+      paymentId,
+    payment:
+      record || null,
+  });
+}
+
+
+/* =========================================================
+   PÁGINA DE RETORNO
+========================================================= */
+
+async function handleAccessPage(
+  url,
+  env
+) {
+  const paymentId =
+    url.searchParams.get(
+      "payment_id"
+    );
+
+  /*
+   * O plano compartilhável pode voltar
+   * sem payment_id.
+   *
+   * Não exibimos erro para o cliente.
+   */
+  if (!paymentId) {
+    return htmlPage(
+      "Assinatura recebida",
+      `
+      <h1>Minhas Finanças</h1>
+
+      <div class="success">✓</div>
+
+      <h2>Retorno recebido</h2>
+
+      <p>
+        O Mercado Pago está processando
+        sua assinatura.
+      </p>
+
+      <p>
+        Volte ao aplicativo e informe
+        o mesmo e-mail utilizado na
+        assinatura para verificar seu
+        acesso Pro.
+      </p>
+
+      <p>
+        <a
+          class="button"
+          href="${APP_URL}"
+        >
+          Voltar ao Minhas Finanças
+        </a>
+      </p>
+      `
+    );
+  }
+
+  const record =
+    await env.PAYMENTS.get(
+      `payment:${paymentId}`,
+      "json"
+    );
+
+  if (
+    !record ||
+    !record.approved
+  ) {
+    return htmlPage(
+      "Pagamento em confirmação",
+      `
+      <h1>Minhas Finanças</h1>
+
+      <h2>
+        Pagamento em confirmação
+      </h2>
+
+      <p>
+        O Mercado Pago ainda não
+        confirmou este pagamento.
+      </p>
+
+      <p>
+        Assim que a confirmação chegar,
+        o acesso Pro poderá ser
+        identificado pelo aplicativo.
+      </p>
+
+      <p>
+        <a
+          class="button"
+          href="${APP_URL}"
+        >
+          Voltar ao aplicativo
+        </a>
+      </p>
+      `
+    );
+  }
+
+  return htmlPage(
+    "Pagamento confirmado",
+    `
+    <h1>Minhas Finanças</h1>
+
+    <div class="success">✓</div>
+
+    <h2>
+      Pagamento confirmado!
+    </h2>
+
+    <p>
+      Seu pagamento foi confirmado
+      pelo Mercado Pago.
+    </p>
+
+    <p>
+      Volte ao aplicativo para
+      verificar seu acesso Pro.
+    </p>
+
+    <p>
+      <a
+        class="button"
+        href="${APP_URL}"
+      >
+        Acessar Minhas Finanças
+      </a>
+    </p>
+    `
+  );
+}
+
+
+/* =========================================================
+   API MERCADO PAGO
+========================================================= */
+
+async function mercadoPagoGet(
+  path,
+  env
+) {
+  const response =
+    await fetch(
+      `https://api.mercadopago.com${path}`,
+      {
+        method: "GET",
+
+        headers: {
+          Authorization:
+            `Bearer ${env.MP_ACCESS_TOKEN}`,
+
+          "Content-Type":
+            "application/json",
+        },
+      }
+    );
+
+  const text =
+    await response.text();
 
   let data = null;
 
   try {
-    data = text ? JSON.parse(text) : null;
+    data =
+      text
+        ? JSON.parse(text)
+        : null;
   } catch {
     data = null;
   }
@@ -436,80 +1124,9 @@ async function mercadoPagoGet(path, env) {
 }
 
 
-async function handleStatus(url, env) {
-  const paymentId = url.searchParams.get("payment_id");
-
-  if (!paymentId) {
-    return json(
-      {
-        ok: false,
-        error: "payment_id obrigatório",
-      },
-      400
-    );
-  }
-
-  const record = await env.PAYMENTS.get(
-    `payment:${paymentId}`,
-    "json"
-  );
-
-  return json({
-    ok: true,
-    payment_id: paymentId,
-    payment: record || null,
-  });
-}
-
-
-async function handleAccessPage(url, env) {
-  const paymentId = url.searchParams.get("payment_id");
-
-  /*
-   * O Mercado Pago pode voltar para /acesso sem acrescentar
-   * payment_id. Isso não deve ser apresentado como erro.
-   */
-  if (!paymentId) {
-    return htmlPage(
-      "Assinatura recebida",
-      `
-      <h1>Minhas Finanças</h1>
-      <p>Recebemos o retorno da sua assinatura.</p>
-      <p>A confirmação do pagamento é feita automaticamente pelo Mercado Pago.</p>
-      <p>Assim que o pagamento estiver aprovado, seu acesso poderá ser liberado.</p>
-      `
-    );
-  }
-
-  const record = await env.PAYMENTS.get(
-    `payment:${paymentId}`,
-    "json"
-  );
-
-  if (!record || !record.approved) {
-    return htmlPage(
-      "Pagamento em confirmação",
-      `
-      <h1>Pagamento em confirmação</h1>
-      <p>O Mercado Pago ainda não confirmou este pagamento.</p>
-      <p>Assim que a confirmação chegar, o acesso poderá ser liberado.</p>
-      `
-    );
-  }
-
-  const appUrl =
-    "https://pauloh123f.github.io/minhas-financas/";
-
-  return htmlPage(
-    "Pagamento confirmado",
-    `
-    <h1>Pagamento confirmado! ✅</h1>
-    <p>Seu acesso ao <strong>Minhas Finanças Pro</strong> foi confirmado.</p>
-    <p><a class="button" href="${appUrl}">Acessar o Minhas Finanças</a></p>
-    `
-  );
-}
-
+/* =========================================================
+   ASSINATURA DO WEBHOOK
+========================================================= */
 
 async function validateMercadoPagoSignature(
   request,
@@ -517,80 +1134,149 @@ async function validateMercadoPagoSignature(
   secret
 ) {
   const xSignature =
-    request.headers.get("x-signature");
+    request.headers.get(
+      "x-signature"
+    );
 
   const xRequestId =
-    request.headers.get("x-request-id");
+    request.headers.get(
+      "x-request-id"
+    );
 
-  if (!xSignature || !xRequestId) {
+  if (
+    !xSignature ||
+    !xRequestId
+  ) {
     return false;
   }
 
-  const parts = Object.fromEntries(
-    xSignature.split(",").map((item) => {
-      const [key, value] = item.split("=");
+  const parts = {};
 
-      return [
-        key?.trim(),
-        value?.trim(),
-      ];
-    })
-  );
+  for (
+    const item of
+    xSignature.split(",")
+  ) {
+    const index =
+      item.indexOf("=");
 
-  const ts = parts.ts;
-  const v1 = parts.v1;
+    if (index === -1) {
+      continue;
+    }
+
+    const key =
+      item
+        .slice(0, index)
+        .trim();
+
+    const value =
+      item
+        .slice(index + 1)
+        .trim();
+
+    if (key) {
+      parts[key] = value;
+    }
+  }
+
+  const ts =
+    parts.ts;
+
+  const v1 =
+    parts.v1;
 
   if (!ts || !v1) {
     return false;
   }
 
   const manifest =
-    `id:${String(resourceId).toLowerCase()};` +
+    `id:${String(
+      resourceId
+    ).toLowerCase()};` +
     `request-id:${xRequestId};` +
     `ts:${ts};`;
 
   const expected =
-    await hmacSha256Hex(secret, manifest);
+    await hmacSha256Hex(
+      secret,
+      manifest
+    );
 
-  return timingSafeEqual(expected, v1);
+  return timingSafeEqual(
+    expected,
+    v1
+  );
 }
 
 
-async function hmacSha256Hex(secret, message) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    {
-      name: "HMAC",
-      hash: "SHA-256",
-    },
-    false,
-    ["sign"]
-  );
+/* =========================================================
+   HMAC
+========================================================= */
+
+async function hmacSha256Hex(
+  secret,
+  message
+) {
+  const key =
+    await crypto.subtle.importKey(
+      "raw",
+
+      new TextEncoder().encode(
+        secret
+      ),
+
+      {
+        name: "HMAC",
+        hash: "SHA-256",
+      },
+
+      false,
+
+      ["sign"]
+    );
 
   const signature =
     await crypto.subtle.sign(
       "HMAC",
       key,
-      new TextEncoder().encode(message)
+      new TextEncoder().encode(
+        message
+      )
     );
 
-  return [...new Uint8Array(signature)]
-    .map((b) =>
-      b.toString(16).padStart(2, "0")
+  return [
+    ...new Uint8Array(
+      signature
+    ),
+  ]
+    .map(
+      (b) =>
+        b
+          .toString(16)
+          .padStart(2, "0")
     )
     .join("");
 }
 
 
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) {
+function timingSafeEqual(
+  a,
+  b
+) {
+  if (
+    typeof a !== "string" ||
+    typeof b !== "string" ||
+    a.length !== b.length
+  ) {
     return false;
   }
 
   let result = 0;
 
-  for (let i = 0; i < a.length; i++) {
+  for (
+    let i = 0;
+    i < a.length;
+    i++
+  ) {
     result |=
       a.charCodeAt(i) ^
       b.charCodeAt(i);
@@ -600,79 +1286,269 @@ function timingSafeEqual(a, b) {
 }
 
 
-function json(data, status = 200) {
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function normalizeEmail(
+  value
+) {
+  if (!value) {
+    return "";
+  }
+
+  return String(value)
+    .trim()
+    .toLowerCase();
+}
+
+
+function corsJson(
+  data,
+  status = 200
+) {
   return new Response(
-    JSON.stringify(data, null, 2),
+    JSON.stringify(
+      data,
+      null,
+      2
+    ),
     {
       status,
+
       headers: {
         "content-type":
           "application/json; charset=UTF-8",
+
+        "access-control-allow-origin":
+          APP_URL.replace(
+            /\/$/,
+            ""
+          ),
+
+        "access-control-allow-methods":
+          "GET,POST,OPTIONS",
+
+        "access-control-allow-headers":
+          "Content-Type",
       },
     }
   );
 }
 
 
-function htmlPage(title, content, status = 200) {
+function corsResponse(
+  body,
+  status = 200
+) {
+  return new Response(
+    body,
+    {
+      status,
+
+      headers: {
+        "access-control-allow-origin":
+          APP_URL.replace(
+            /\/$/,
+            ""
+          ),
+
+        "access-control-allow-methods":
+          "GET,POST,OPTIONS",
+
+        "access-control-allow-headers":
+          "Content-Type",
+
+        "access-control-max-age":
+          "86400",
+      },
+    }
+  );
+}
+
+
+function htmlPage(
+  title,
+  content,
+  status = 200
+) {
   return new Response(
     `<!doctype html>
 <html lang="pt-BR">
+
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${escapeHtml(title)}</title>
+
+<meta
+  name="viewport"
+  content="width=device-width,initial-scale=1"
+>
+
+<title>
+${escapeHtml(title)}
+</title>
+
 <style>
-body{
-  font-family:Arial,sans-serif;
-  background:#07111f;
-  color:#fff;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  min-height:100vh;
-  margin:0;
-  padding:24px
+
+body {
+  font-family:
+    Arial,
+    sans-serif;
+
+  background:
+    #07111f;
+
+  color:
+    #fff;
+
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  min-height:
+    100vh;
+
+  margin:
+    0;
+
+  padding:
+    24px;
 }
-.card{
-  max-width:520px;
-  width:100%;
-  background:#102033;
-  border:1px solid #24405e;
-  border-radius:24px;
-  padding:32px;
-  box-sizing:border-box;
-  text-align:center
+
+.card {
+  max-width:
+    520px;
+
+  width:
+    100%;
+
+  background:
+    #102033;
+
+  border:
+    1px solid #24405e;
+
+  border-radius:
+    24px;
+
+  padding:
+    32px;
+
+  box-sizing:
+    border-box;
+
+  text-align:
+    center;
 }
-h1{
-  font-size:30px;
-  margin-top:0
+
+h1 {
+  font-size:
+    30px;
+
+  margin-top:
+    0;
 }
-p{
-  font-size:18px;
-  line-height:1.5;
-  color:#c8d4e2
+
+h2 {
+  font-size:
+    23px;
 }
-.button{
-  display:inline-block;
-  background:#20c878;
-  color:#04120b;
-  text-decoration:none;
-  font-weight:700;
-  padding:15px 22px;
-  border-radius:14px;
-  margin-top:12px
+
+p {
+  font-size:
+    18px;
+
+  line-height:
+    1.5;
+
+  color:
+    #c8d4e2;
 }
+
+.success {
+  width:
+    72px;
+
+  height:
+    72px;
+
+  margin:
+    18px auto;
+
+  border-radius:
+    50%;
+
+  background:
+    #20c878;
+
+  color:
+    #04120b;
+
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  font-size:
+    40px;
+
+  font-weight:
+    700;
+}
+
+.button {
+  display:
+    inline-block;
+
+  background:
+    #20c878;
+
+  color:
+    #04120b;
+
+  text-decoration:
+    none;
+
+  font-weight:
+    700;
+
+  padding:
+    15px 22px;
+
+  border-radius:
+    14px;
+
+  margin-top:
+    12px;
+}
+
 </style>
+
 </head>
+
 <body>
+
 <div class="card">
+
 ${content}
+
 </div>
+
 </body>
+
 </html>`,
     {
       status,
+
       headers: {
         "content-type":
           "text/html; charset=UTF-8",
@@ -682,11 +1558,28 @@ ${content}
 }
 
 
-function escapeHtml(value) {
+function escapeHtml(
+  value
+) {
   return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+    .replaceAll(
+      "&",
+      "&amp;"
+    )
+    .replaceAll(
+      "<",
+      "&lt;"
+    )
+    .replaceAll(
+      ">",
+      "&gt;"
+    )
+    .replaceAll(
+      '"',
+      "&quot;"
+    )
+    .replaceAll(
+      "'",
+      "&#039;"
+    );
 }
