@@ -99,9 +99,15 @@ async function handleMercadoPagoWebhook(request, env) {
     }
   }
 
-  // Consulta o pagamento diretamente na API do Mercado Pago.
-  const mpResponse = await fetch(
-    `https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`,
+const eventType = url.searchParams.get("type") || body?.type;
+
+const apiUrl =
+  eventType === "subscription_authorized_payment"
+    ? `https://api.mercadopago.com/authorized_payments/${encodeURIComponent(paymentId)}`
+    : `https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`;
+
+const mpResponse = await fetch(
+  apiUrl,
     {
       headers: {
         Authorization: `Bearer ${env.MP_ACCESS_TOKEN}`,
