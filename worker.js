@@ -1,7 +1,15 @@
 /**
  * MINHAS FINANÇAS PRO
  * Cloudflare Worker + Mercado Pago + Cloudflare KV
- * Versão 3.0.1
+ * Versão 4.0.0
+ *
+ * Estratégia:
+ * 1. Webhook mantém KV atualizado.
+ * 2. /pro/status consulta KV.
+ * 3. Se necessário, sincroniza diretamente com Mercado Pago:
+ *    - assinatura por payer_email
+ *    - faturas por preapproval_id
+ *    - pagamento aprovado
  */
 
 const APP_URL = "https://pauloh123f.github.io/minhas-financas/";
@@ -21,7 +29,7 @@ export default {
       return corsJson({
         ok: true,
         service: "minhas-financas-backend",
-        version: "3.0.1",
+        version: "4.0.0",
       });
     }
 
@@ -33,7 +41,7 @@ export default {
     }
 
     if (request.method === "GET" && url.pathname === "/acesso") {
-      return handleAccessPage(url, env);
+      return handleAccessPage();
     }
 
     if (request.method === "GET" && url.pathname === "/status") {
@@ -60,7 +68,7 @@ export default {
 
 
 /* =========================================================
-   WEBHOOK MERCADO PAGO
+   WEBHOOK
 ========================================================= */
 
 async function handleMercadoPagoWebhook(request, env) {
@@ -146,15 +154,6 @@ async function handleMercadoPagoWebhook(request, env) {
     return processAuthorizedPayment(resourceId, env);
   }
 
-  if (eventType === "subscription_preapproval_plan") {
-    return corsJson({
-      ok: true,
-      received: true,
-      type: eventType,
-      resource_id: String(resourceId),
-    });
-  }
-
   return corsJson({
     ok: true,
     received: true,
@@ -194,16 +193,26 @@ async function processPayment(paymentId, env) {
     return corsJson(
       {
         ok: false,
-        error: "Erro temporário consultando pagamento.",
+        error: "Erro consultando pagamento.",
       },
       502
     );
   }
 
-  const payment = result.data;
+  const record = await savePayment(result.data, env);
 
-  const approved = payment?.status === "approved";
+  return corsJson({
+    ok: true,
+    received: true,
+    type: "payment",
+    payment_id: record.payment_id,
+    status: record.status,
+    approved: record.approved,
+  });
+}
 
+
+async function savePayment(payment, env, subscriptionId = null) {
   const email = normalizeEmail(payment?.payer?.email);
 
   const record = {
@@ -213,38 +222,33 @@ async function processPayment(paymentId, env) {
     amount: payment.transaction_amount ?? null,
     currency: payment.currency_id || null,
     payer_email: email || null,
-    external_reference: payment.external_reference || null,
-    date_approved: payment.date_approved || null,
-    updated_at: new Date().toISOString(),
-    approved,
+    external_reference:
+      payment.external_reference || null,
+    date_approved:
+      payment.date_approved || null,
+    subscription_id:
+      subscriptionId || null,
+    updated_at:
+      new Date().toISOString(),
+    approved:
+      payment.status === "approved",
   };
 
   await env.PAYMENTS.put(
     `payment:${payment.id}`,
     JSON.stringify(record),
-    {
-      expirationTtl: KV_TTL,
-    }
+    { expirationTtl: KV_TTL }
   );
 
   if (email) {
     await env.PAYMENTS.put(
       `payment-email:${email}`,
       JSON.stringify(record),
-      {
-        expirationTtl: KV_TTL,
-      }
+      { expirationTtl: KV_TTL }
     );
   }
 
-  return corsJson({
-    ok: true,
-    received: true,
-    type: "payment",
-    payment_id: String(payment.id),
-    status: payment.status || null,
-    approved,
-  });
+  return record;
 }
 
 
@@ -278,27 +282,50 @@ async function processSubscription(subscriptionId, env) {
     return corsJson(
       {
         ok: false,
-        error: "Erro temporário consultando assinatura.",
+        error: "Erro consultando assinatura.",
       },
       502
     );
   }
 
-  const subscription = result.data;
+  const record = await saveSubscription(
+    result.data,
+    env
+  );
 
-  const email = normalizeEmail(subscription?.payer_email);
+  return corsJson({
+    ok: true,
+    received: true,
+    type: "subscription_preapproval",
+    subscription_id: record.subscription_id,
+    status: record.status,
+    active: record.active,
+  });
+}
 
-  const active = subscription?.status === "authorized";
+
+async function saveSubscription(subscription, env, forcedEmail = "") {
+  const email =
+    normalizeEmail(subscription?.payer_email) ||
+    normalizeEmail(forcedEmail);
 
   const record = {
-    subscription_id: String(subscription.id),
-    status: subscription.status || null,
-    active,
-    payer_email: email || null,
+    subscription_id:
+      String(subscription.id),
 
-    payer_id: subscription.payer_id
-      ? String(subscription.payer_id)
-      : null,
+    status:
+      subscription.status || null,
+
+    active:
+      subscription.status === "authorized",
+
+    payer_email:
+      email || null,
+
+    payer_id:
+      subscription.payer_id
+        ? String(subscription.payer_id)
+        : null,
 
     preapproval_plan_id:
       subscription.preapproval_plan_id || null,
@@ -306,45 +333,36 @@ async function processSubscription(subscriptionId, env) {
     external_reference:
       subscription.external_reference || null,
 
-    reason: subscription.reason || null,
+    reason:
+      subscription.reason || null,
 
     date_created:
       subscription.date_created || null,
 
-    updated_at: new Date().toISOString(),
+    updated_at:
+      new Date().toISOString(),
   };
 
   await env.PAYMENTS.put(
     `subscription:${subscription.id}`,
     JSON.stringify(record),
-    {
-      expirationTtl: KV_TTL,
-    }
+    { expirationTtl: KV_TTL }
   );
 
   if (email) {
     await env.PAYMENTS.put(
       `subscription-email:${email}`,
       JSON.stringify(record),
-      {
-        expirationTtl: KV_TTL,
-      }
+      { expirationTtl: KV_TTL }
     );
   }
 
-  return corsJson({
-    ok: true,
-    received: true,
-    type: "subscription_preapproval",
-    subscription_id: String(subscription.id),
-    status: subscription.status || null,
-    active,
-  });
+  return record;
 }
 
 
 /* =========================================================
-   PAGAMENTO RECORRENTE DA ASSINATURA
+   FATURA DA ASSINATURA
 ========================================================= */
 
 async function processAuthorizedPayment(invoiceId, env) {
@@ -373,7 +391,7 @@ async function processAuthorizedPayment(invoiceId, env) {
     return corsJson(
       {
         ok: false,
-        error: "Erro temporário consultando fatura.",
+        error: "Erro consultando fatura.",
       },
       502
     );
@@ -381,46 +399,12 @@ async function processAuthorizedPayment(invoiceId, env) {
 
   const invoice = result.data;
 
-  const paymentId = invoice?.payment?.id
-    ? String(invoice.payment.id)
-    : null;
+  await saveInvoice(invoice, env);
 
-  const paymentApproved =
-    invoice?.payment?.status === "approved";
-
-  const record = {
-    authorized_payment_id: String(invoice.id),
-    preapproval_id: invoice.preapproval_id || null,
-    external_reference: invoice.external_reference || null,
-    status: invoice.status || null,
-    summarized: invoice.summarized || null,
-    amount: invoice.transaction_amount ?? null,
-    currency: invoice.currency_id || null,
-    payment_id: paymentId,
-    payment_status: invoice?.payment?.status || null,
-    payment_status_detail:
-      invoice?.payment?.status_detail || null,
-    payment_approved: paymentApproved,
-    updated_at: new Date().toISOString(),
-  };
-
-  await env.PAYMENTS.put(
-    `invoice:${invoice.id}`,
-    JSON.stringify(record),
-    {
-      expirationTtl: KV_TTL,
-    }
-  );
-
-  if (invoice.preapproval_id) {
-    await env.PAYMENTS.put(
-      `last-invoice:${invoice.preapproval_id}`,
-      JSON.stringify(record),
-      {
-        expirationTtl: KV_TTL,
-      }
-    );
-  }
+  const paymentId =
+    invoice?.payment?.id
+      ? String(invoice.payment.id)
+      : null;
 
   if (paymentId) {
     const paymentResult = await mercadoPagoGet(
@@ -429,45 +413,11 @@ async function processAuthorizedPayment(invoiceId, env) {
     );
 
     if (paymentResult.ok) {
-      const payment = paymentResult.data;
-
-      const email = normalizeEmail(payment?.payer?.email);
-
-      const approved = payment?.status === "approved";
-
-      const paymentRecord = {
-        payment_id: String(payment.id),
-        status: payment.status || null,
-        status_detail: payment.status_detail || null,
-        amount: payment.transaction_amount ?? null,
-        currency: payment.currency_id || null,
-        payer_email: email || null,
-        external_reference:
-          payment.external_reference || null,
-        date_approved: payment.date_approved || null,
-        subscription_id:
-          invoice.preapproval_id || null,
-        updated_at: new Date().toISOString(),
-        approved,
-      };
-
-      await env.PAYMENTS.put(
-        `payment:${payment.id}`,
-        JSON.stringify(paymentRecord),
-        {
-          expirationTtl: KV_TTL,
-        }
+      await savePayment(
+        paymentResult.data,
+        env,
+        invoice.preapproval_id || null
       );
-
-      if (email) {
-        await env.PAYMENTS.put(
-          `payment-email:${email}`,
-          JSON.stringify(paymentRecord),
-          {
-            expirationTtl: KV_TTL,
-          }
-        );
-      }
     }
   }
 
@@ -476,10 +426,309 @@ async function processAuthorizedPayment(invoiceId, env) {
     received: true,
     type: "subscription_authorized_payment",
     resource_id: String(invoice.id),
-    subscription_id: invoice.preapproval_id || null,
+    subscription_id:
+      invoice.preapproval_id || null,
     payment_id: paymentId,
-    payment_approved: paymentApproved,
+    payment_approved:
+      invoice?.payment?.status === "approved",
   });
+}
+
+
+async function saveInvoice(invoice, env) {
+  const record = {
+    authorized_payment_id:
+      String(invoice.id),
+
+    preapproval_id:
+      invoice.preapproval_id || null,
+
+    external_reference:
+      invoice.external_reference || null,
+
+    status:
+      invoice.status || null,
+
+    summarized:
+      invoice.summarized || null,
+
+    amount:
+      invoice.transaction_amount ?? null,
+
+    currency:
+      invoice.currency_id || null,
+
+    payment_id:
+      invoice?.payment?.id
+        ? String(invoice.payment.id)
+        : null,
+
+    payment_status:
+      invoice?.payment?.status || null,
+
+    payment_status_detail:
+      invoice?.payment?.status_detail || null,
+
+    payment_approved:
+      invoice?.payment?.status === "approved",
+
+    updated_at:
+      new Date().toISOString(),
+  };
+
+  await env.PAYMENTS.put(
+    `invoice:${invoice.id}`,
+    JSON.stringify(record),
+    { expirationTtl: KV_TTL }
+  );
+
+  if (invoice.preapproval_id) {
+    await env.PAYMENTS.put(
+      `last-invoice:${invoice.preapproval_id}`,
+      JSON.stringify(record),
+      { expirationTtl: KV_TTL }
+    );
+  }
+
+  return record;
+}
+
+
+/* =========================================================
+   SINCRONIZAÇÃO POR E-MAIL
+========================================================= */
+
+async function syncProFromMercadoPago(email, env) {
+  console.log(
+    "Sincronizando Pro diretamente com Mercado Pago:",
+    email
+  );
+
+  /*
+   * 1. Procura assinaturas vinculadas ao e-mail.
+   */
+  const subscriptionSearch = await mercadoPagoGet(
+    `/preapproval/search?payer_email=${encodeURIComponent(email)}`,
+    env
+  );
+
+  if (!subscriptionSearch.ok) {
+    console.error(
+      "Falha buscando assinatura:",
+      subscriptionSearch.status,
+      subscriptionSearch.text
+    );
+
+    return {
+      ok: false,
+      reason: "subscription_search_failed",
+    };
+  }
+
+  const subscriptions =
+    Array.isArray(subscriptionSearch.data?.results)
+      ? subscriptionSearch.data.results
+      : [];
+
+  if (!subscriptions.length) {
+    return {
+      ok: true,
+      found: false,
+      subscription: null,
+      invoice: null,
+      payment: null,
+    };
+  }
+
+  /*
+   * Prioridade:
+   * - authorized
+   * - assinatura mais recente
+   */
+  subscriptions.sort((a, b) => {
+    const aAuthorized =
+      a?.status === "authorized" ? 1 : 0;
+
+    const bAuthorized =
+      b?.status === "authorized" ? 1 : 0;
+
+    if (aAuthorized !== bAuthorized) {
+      return bAuthorized - aAuthorized;
+    }
+
+    return (
+      new Date(b?.date_created || 0).getTime() -
+      new Date(a?.date_created || 0).getTime()
+    );
+  });
+
+  const subscription = subscriptions[0];
+
+  const subscriptionRecord =
+    await saveSubscription(
+      subscription,
+      env,
+      email
+    );
+
+  /*
+   * 2. Busca as faturas da assinatura.
+   */
+  const invoiceSearch = await mercadoPagoGet(
+    `/authorized_payments/search?preapproval_id=${encodeURIComponent(
+      subscription.id
+    )}`,
+    env
+  );
+
+  if (!invoiceSearch.ok) {
+    console.error(
+      "Falha buscando faturas:",
+      invoiceSearch.status,
+      invoiceSearch.text
+    );
+
+    return {
+      ok: true,
+      found: true,
+      subscription: subscriptionRecord,
+      invoice: null,
+      payment: null,
+      invoice_search_failed: true,
+    };
+  }
+
+  const invoices =
+    Array.isArray(invoiceSearch.data?.results)
+      ? invoiceSearch.data.results
+      : [];
+
+  /*
+   * Primeiro procuramos uma fatura com pagamento aprovado.
+   */
+  const approvedInvoice =
+    invoices.find(
+      (item) =>
+        item?.payment?.status === "approved"
+    ) || null;
+
+  /*
+   * Caso não exista aprovada, mantemos a mais recente
+   * apenas para diagnóstico.
+   */
+  const selectedInvoice =
+    approvedInvoice ||
+    invoices
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(
+            b?.last_modified ||
+            b?.date_created ||
+            0
+          ).getTime() -
+          new Date(
+            a?.last_modified ||
+            a?.date_created ||
+            0
+          ).getTime()
+      )[0] ||
+    null;
+
+  if (!selectedInvoice) {
+    return {
+      ok: true,
+      found: true,
+      subscription: subscriptionRecord,
+      invoice: null,
+      payment: null,
+    };
+  }
+
+  const invoiceRecord =
+    await saveInvoice(
+      selectedInvoice,
+      env
+    );
+
+  /*
+   * 3. Se a fatura contém payment.id,
+   * consulta o pagamento real.
+   */
+  const paymentId =
+    selectedInvoice?.payment?.id
+      ? String(selectedInvoice.payment.id)
+      : null;
+
+  let paymentRecord = null;
+
+  if (paymentId) {
+    const paymentResult = await mercadoPagoGet(
+      `/v1/payments/${encodeURIComponent(paymentId)}`,
+      env
+    );
+
+    if (paymentResult.ok) {
+      paymentRecord =
+        await savePayment(
+          paymentResult.data,
+          env,
+          subscription.id
+        );
+    } else {
+      /*
+       * A própria fatura é fonte oficial do status
+       * do pagamento. Se ela informa approved,
+       * gravamos um registro mínimo associado ao e-mail.
+       */
+      if (
+        selectedInvoice?.payment?.status ===
+        "approved"
+      ) {
+        paymentRecord = {
+          payment_id: paymentId,
+          status: "approved",
+          status_detail:
+            selectedInvoice?.payment?.status_detail ||
+            null,
+          amount:
+            selectedInvoice.transaction_amount ?? null,
+          currency:
+            selectedInvoice.currency_id || null,
+          payer_email: email,
+          external_reference:
+            selectedInvoice.external_reference || null,
+          date_approved: null,
+          subscription_id:
+            String(subscription.id),
+          updated_at:
+            new Date().toISOString(),
+          approved: true,
+          source: "authorized_payment",
+        };
+
+        await env.PAYMENTS.put(
+          `payment:${paymentId}`,
+          JSON.stringify(paymentRecord),
+          { expirationTtl: KV_TTL }
+        );
+
+        await env.PAYMENTS.put(
+          `payment-email:${email}`,
+          JSON.stringify(paymentRecord),
+          { expirationTtl: KV_TTL }
+        );
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    found: true,
+    subscription: subscriptionRecord,
+    invoice: invoiceRecord,
+    payment: paymentRecord,
+  };
 }
 
 
@@ -503,36 +752,115 @@ async function handleProStatus(url, env) {
     );
   }
 
-  const subscription = await env.PAYMENTS.get(
-    `subscription-email:${email}`,
-    "json"
-  );
+  if (!env.MP_ACCESS_TOKEN) {
+    return corsJson(
+      {
+        ok: false,
+        pro: false,
+        error:
+          "MP_ACCESS_TOKEN não configurado.",
+      },
+      500
+    );
+  }
 
-  const payment = await env.PAYMENTS.get(
-    `payment-email:${email}`,
-    "json"
-  );
+  /*
+   * Consulta primeiro o KV.
+   */
+  let subscription =
+    await env.PAYMENTS.get(
+      `subscription-email:${email}`,
+      "json"
+    );
 
-  const subscriptionActive =
+  let payment =
+    await env.PAYMENTS.get(
+      `payment-email:${email}`,
+      "json"
+    );
+
+  let subscriptionActive =
     subscription?.status === "authorized";
 
-  const paymentApproved =
+  let paymentApproved =
     payment?.status === "approved";
 
+  let synchronized = false;
+
+  /*
+   * Se ainda não temos os dois estados necessários,
+   * consulta diretamente o Mercado Pago.
+   */
+  if (!subscriptionActive || !paymentApproved) {
+    const sync =
+      await syncProFromMercadoPago(
+        email,
+        env
+      );
+
+    synchronized = true;
+
+    console.log(
+      "Resultado sincronização:",
+      JSON.stringify({
+        ok: sync?.ok,
+        found: sync?.found,
+        subscription_status:
+          sync?.subscription?.status || null,
+        payment_status:
+          sync?.payment?.status ||
+          sync?.invoice?.payment_status ||
+          null,
+      })
+    );
+
+    /*
+     * Relê o KV após sincronização.
+     */
+    subscription =
+      await env.PAYMENTS.get(
+        `subscription-email:${email}`,
+        "json"
+      );
+
+    payment =
+      await env.PAYMENTS.get(
+        `payment-email:${email}`,
+        "json"
+      );
+
+    subscriptionActive =
+      subscription?.status === "authorized";
+
+    paymentApproved =
+      payment?.status === "approved";
+  }
+
   const pro = Boolean(
-    subscriptionActive && paymentApproved
+    subscriptionActive &&
+    paymentApproved
   );
 
   return corsJson({
     ok: true,
     pro,
+
     subscription_status:
       subscription?.status || null,
+
     payment_status:
       payment?.status || null,
+
     subscription_id:
       subscription?.subscription_id || null,
-    checked_at: new Date().toISOString(),
+
+    payment_id:
+      payment?.payment_id || null,
+
+    synchronized,
+
+    checked_at:
+      new Date().toISOString(),
   });
 }
 
@@ -555,10 +883,30 @@ async function handlePaymentStatus(url, env) {
     );
   }
 
-  const record = await env.PAYMENTS.get(
-    `payment:${paymentId}`,
-    "json"
-  );
+  let record =
+    await env.PAYMENTS.get(
+      `payment:${paymentId}`,
+      "json"
+    );
+
+  /*
+   * Se não estiver no KV, tenta o ID diretamente
+   * na API oficial.
+   */
+  if (!record && env.MP_ACCESS_TOKEN) {
+    const result = await mercadoPagoGet(
+      `/v1/payments/${encodeURIComponent(paymentId)}`,
+      env
+    );
+
+    if (result.ok) {
+      record =
+        await savePayment(
+          result.data,
+          env
+        );
+    }
+  }
 
   return corsJson({
     ok: true,
@@ -572,25 +920,23 @@ async function handlePaymentStatus(url, env) {
    PÁGINA DE RETORNO
 ========================================================= */
 
-async function handleAccessPage(url, env) {
-  const paymentId =
-    url.searchParams.get("payment_id");
-
-  if (!paymentId) {
-    return htmlPage(
-      "Assinatura recebida",
-      `
+function handleAccessPage() {
+  return htmlPage(
+    "Assinatura recebida",
+    `
       <h1>Minhas Finanças</h1>
       <div class="success">✓</div>
-      <h2>Retorno recebido</h2>
 
-      <p>
-        O Mercado Pago está processando sua assinatura.
-      </p>
+      <h2>Assinatura recebida</h2>
 
       <p>
         Volte ao aplicativo e informe o mesmo e-mail
-        utilizado na assinatura para verificar seu acesso Pro.
+        utilizado no Mercado Pago.
+      </p>
+
+      <p>
+        O Minhas Finanças verificará automaticamente
+        sua assinatura.
       </p>
 
       <p>
@@ -598,60 +944,6 @@ async function handleAccessPage(url, env) {
           Voltar ao Minhas Finanças
         </a>
       </p>
-      `
-    );
-  }
-
-  const record = await env.PAYMENTS.get(
-    `payment:${paymentId}`,
-    "json"
-  );
-
-  if (!record || !record.approved) {
-    return htmlPage(
-      "Pagamento em confirmação",
-      `
-      <h1>Minhas Finanças</h1>
-      <h2>Pagamento em confirmação</h2>
-
-      <p>
-        O Mercado Pago ainda não confirmou este pagamento.
-      </p>
-
-      <p>
-        Assim que a confirmação chegar, o acesso Pro poderá
-        ser identificado pelo aplicativo.
-      </p>
-
-      <p>
-        <a class="button" href="${APP_URL}">
-          Voltar ao aplicativo
-        </a>
-      </p>
-      `
-    );
-  }
-
-  return htmlPage(
-    "Pagamento confirmado",
-    `
-    <h1>Minhas Finanças</h1>
-    <div class="success">✓</div>
-    <h2>Pagamento confirmado!</h2>
-
-    <p>
-      Seu pagamento foi confirmado pelo Mercado Pago.
-    </p>
-
-    <p>
-      Volte ao aplicativo para verificar seu acesso Pro.
-    </p>
-
-    <p>
-      <a class="button" href="${APP_URL}">
-        Acessar Minhas Finanças
-      </a>
-    </p>
     `
   );
 }
@@ -671,6 +963,7 @@ async function mercadoPagoGet(path, env) {
         Authorization:
           `Bearer ${env.MP_ACCESS_TOKEN}`,
 
+        Accept: "application/json",
         "Content-Type": "application/json",
       },
     }
@@ -681,7 +974,10 @@ async function mercadoPagoGet(path, env) {
   let data = null;
 
   try {
-    data = text ? JSON.parse(text) : null;
+    data =
+      text
+        ? JSON.parse(text)
+        : null;
   } catch {
     data = null;
   }
@@ -696,7 +992,7 @@ async function mercadoPagoGet(path, env) {
 
 
 /* =========================================================
-   VALIDAÇÃO DA ASSINATURA DO WEBHOOK
+   VALIDAÇÃO WEBHOOK
 ========================================================= */
 
 async function validateMercadoPagoSignature(
@@ -717,7 +1013,8 @@ async function validateMercadoPagoSignature(
   const parts = {};
 
   for (const item of xSignature.split(",")) {
-    const index = item.indexOf("=");
+    const index =
+      item.indexOf("=");
 
     if (index === -1) {
       continue;
@@ -746,12 +1043,16 @@ async function validateMercadoPagoSignature(
     `request-id:${xRequestId};` +
     `ts:${ts};`;
 
-  const expected = await hmacSha256Hex(
-    secret,
-    manifest
-  );
+  const expected =
+    await hmacSha256Hex(
+      secret,
+      manifest
+    );
 
-  return timingSafeEqual(expected, v1);
+  return timingSafeEqual(
+    expected,
+    v1
+  );
 }
 
 
@@ -760,27 +1061,33 @@ async function validateMercadoPagoSignature(
 ========================================================= */
 
 async function hmacSha256Hex(secret, message) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    {
-      name: "HMAC",
-      hash: "SHA-256",
-    },
-    false,
-    ["sign"]
-  );
+  const key =
+    await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secret),
+      {
+        name: "HMAC",
+        hash: "SHA-256",
+      },
+      false,
+      ["sign"]
+    );
 
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(message)
-  );
+  const signature =
+    await crypto.subtle.sign(
+      "HMAC",
+      key,
+      new TextEncoder().encode(message)
+    );
 
-  return [...new Uint8Array(signature)]
+  return [
+    ...new Uint8Array(signature)
+  ]
     .map(
       (b) =>
-        b.toString(16).padStart(2, "0")
+        b
+          .toString(16)
+          .padStart(2, "0")
     )
     .join("");
 }
@@ -797,7 +1104,11 @@ function timingSafeEqual(a, b) {
 
   let result = 0;
 
-  for (let i = 0; i < a.length; i++) {
+  for (
+    let i = 0;
+    i < a.length;
+    i++
+  ) {
     result |=
       a.charCodeAt(i) ^
       b.charCodeAt(i);
@@ -822,13 +1133,6 @@ function normalizeEmail(value) {
 }
 
 
-/*
- * IMPORTANTE:
- * O Origin do GitHub Pages é:
- * https://pauloh123f.github.io
- *
- * O caminho /minhas-financas/ NÃO faz parte do Origin.
- */
 function corsHeaders() {
   return {
     "access-control-allow-origin":
@@ -845,7 +1149,11 @@ function corsHeaders() {
 
 function corsJson(data, status = 200) {
   return new Response(
-    JSON.stringify(data, null, 2),
+    JSON.stringify(
+      data,
+      null,
+      2
+    ),
     {
       status,
 
@@ -861,16 +1169,19 @@ function corsJson(data, status = 200) {
 
 
 function corsResponse(body, status = 200) {
-  return new Response(body, {
-    status,
+  return new Response(
+    body,
+    {
+      status,
 
-    headers: {
-      ...corsHeaders(),
+      headers: {
+        ...corsHeaders(),
 
-      "access-control-max-age":
-        "86400",
-    },
-  });
+        "access-control-max-age":
+          "86400",
+      },
+    }
+  );
 }
 
 
