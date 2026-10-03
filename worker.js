@@ -104,7 +104,9 @@ const eventType = url.searchParams.get("type") || body?.type;
 const apiUrl =
   eventType === "subscription_authorized_payment"
     ? `https://api.mercadopago.com/authorized_payments/${encodeURIComponent(paymentId)}`
-    : `https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`;
+    : eventType === "subscription_preapproval"
+      ? `https://api.mercadopago.com/preapproval/${encodeURIComponent(paymentId)}`
+      : `https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`;
 
 const mpResponse = await fetch(
   apiUrl,
