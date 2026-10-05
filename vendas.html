@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b1f3a">
+  <title>Minhas Finanças — Organize seu dinheiro por R$ 9,90/mês</title>
+  <meta name="description" content="Organize entradas, gastos, dívidas, metas, cartões e compromissos em um só lugar. Minhas Finanças Pro por R$ 9,90/mês.">
+  <style>
+    :root{
+      --navy:#0b1f3a;
+      --blue:#1769aa;
+      --blue2:#1d78bd;
+      --bg:#f5f7fb;
+      --text:#172033;
+      --muted:#667085;
+      --line:#e4e9f0;
+      --white:#fff;
+      --ok:#167347;
+      --shadow:0 14px 40px rgba(11,31,58,.10);
+      --r:22px;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{
+      margin:0;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+      background:var(--bg);
+      color:var(--text);
+      line-height:1.55;
+    }
+    a{text-decoration:none;color:inherit}
+    .wrap{width:min(1100px,calc(100% - 32px));margin:auto}
+    .topbar{
+      position:sticky;top:0;z-index:20;
+      backdrop-filter:blur(14px);
+      background:rgba(255,255,255,.92);
+      border-bottom:1px solid rgba(228,233,240,.9);
+    }
+    .topbar .inner{
+      min-height:68px;display:flex;align-items:center;justify-content:space-between;gap:14px;
+    }
+    .brand{display:flex;align-items:center;gap:11px;font-weight:900;color:var(--navy)}
+    .logo{
+      width:42px;height:42px;border-radius:13px;display:grid;place-items:center;
+      background:linear-gradient(135deg,var(--navy),var(--blue2));
+      color:#fff;font-weight:900;box-shadow:0 8px 20px rgba(23,105,170,.22)
+    }
+    .btn{
+      display:inline-flex;align-items:center;justify-content:center;gap:8px;
+      border:0;border-radius:14px;padding:14px 18px;font-weight:800;cursor:pointer;
+      transition:.18s ease;
+    }
+    .btn:hover{transform:translateY(-1px)}
+    .btn.primary{background:var(--navy);color:#fff;box-shadow:0 10px 24px rgba(11,31,58,.16)}
+    .btn.light{background:#fff;color:var(--navy);border:1px solid var(--line)}
+    .hero{
+      background:
+        radial-gradient(circle at 88% 10%,rgba(62,162,232,.23),transparent 34%),
+        linear-gradient(135deg,#091a31,#123b61 72%,#175d8f);
+      color:#fff;padding:68px 0 58px;overflow:hidden;
+    }
+    .hero-grid{display:grid;grid-template-columns:1.08fr .92fr;gap:44px;align-items:center}
+    .eyebrow{
+      display:inline-block;padding:7px 11px;border-radius:999px;
+      background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);
+      font-size:13px;font-weight:800;margin-bottom:16px;
+    }
+    h1{font-size:clamp(36px,6vw,64px);line-height:1.02;margin:0 0 18px;letter-spacing:-1.8px}
+    .hero p{font-size:19px;color:#d9e7f3;max-width:690px;margin:0 0 24px}
+    .hero-actions{display:flex;gap:12px;flex-wrap:wrap}
+    .hero .btn.primary{background:#fff;color:var(--navy)}
+    .hero .btn.light{background:transparent;color:#fff;border-color:rgba(255,255,255,.3)}
+    .trust{display:flex;gap:14px;flex-wrap:wrap;margin-top:22px;font-size:13px;color:#dbe9f5}
+    .phone{
+      background:#fff;border-radius:30px;padding:12px;box-shadow:0 30px 60px rgba(0,0,0,.28);
+      max-width:380px;margin:auto;color:var(--text)
+    }
+    .screen{border-radius:22px;background:#f6f8fb;padding:17px;min-height:480px}
+    .screen-head{
+      background:linear-gradient(135deg,var(--navy),#174a72);color:#fff;
+      border-radius:20px;padding:18px;margin-bottom:13px
+    }
+    .screen-head small{opacity:.76}
+    .screen-head strong{display:block;font-size:31px;margin-top:4px}
+    .mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+    .mini{background:#fff;border:1px solid var(--line);padding:12px;border-radius:15px}
+    .mini small{display:block;color:var(--muted);font-size:11px}
+    .mini b{display:block;margin-top:3px}
+    .mock-card{background:#fff;border:1px solid var(--line);padding:14px;border-radius:16px;margin-top:10px}
+    .bar{height:8px;border-radius:9px;background:#e7ecf2;margin-top:8px;overflow:hidden}
+    .bar span{display:block;height:100%;width:68%;background:var(--blue)}
+    section{padding:64px 0}
+    .section-title{text-align:center;max-width:760px;margin:0 auto 34px}
+    .section-title h2{font-size:clamp(28px,5vw,44px);line-height:1.1;margin:0 0 12px;color:var(--navy)}
+    .section-title p{margin:0;color:var(--muted);font-size:17px}
+    .features{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+    .feature{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:24px;box-shadow:var(--shadow)}
+    .ico{width:46px;height:46px;border-radius:14px;background:#edf6fd;display:grid;place-items:center;font-size:21px;margin-bottom:14px}
+    .feature h3{margin:0 0 8px;color:var(--navy);font-size:19px}
+    .feature p{margin:0;color:var(--muted)}
+    .band{background:#eaf3fa}
+    .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+    .step{background:#fff;border-radius:var(--r);padding:24px;border:1px solid #dce8f2}
+    .num{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--navy);color:#fff;font-weight:900;margin-bottom:12px}
+    .pricing{max-width:580px;margin:auto;background:#fff;border:2px solid var(--blue);border-radius:28px;padding:30px;box-shadow:var(--shadow)}
+    .price{font-size:48px;font-weight:950;color:var(--navy);letter-spacing:-1px}
+    .price small{font-size:16px;color:var(--muted);font-weight:700}
+    .checks{display:grid;gap:10px;margin:20px 0}
+    .check{display:flex;gap:10px;align-items:flex-start}
+    .tick{color:var(--ok);font-weight:900}
+    .pricing .btn{width:100%;font-size:17px}
+    .note{font-size:12px;color:var(--muted);text-align:center;margin-top:10px}
+    .faq{max-width:820px;margin:auto;display:grid;gap:12px}
+    details{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 18px}
+    summary{cursor:pointer;font-weight:800;color:var(--navy)}
+    details p{color:var(--muted);margin:12px 0 0}
+    .cta{
+      background:linear-gradient(135deg,var(--navy),#174a72);
+      color:#fff;border-radius:30px;padding:38px;text-align:center
+    }
+    .cta h2{font-size:clamp(28px,5vw,42px);margin:0 0 10px}
+    .cta p{color:#dce9f4;margin:0 auto 20px;max-width:680px}
+    .cta .btn{background:#fff;color:var(--navy)}
+    footer{padding:32px 0 110px;color:#667085;font-size:13px}
+    .foot-grid{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:start}
+    .foot-links{display:flex;gap:16px;flex-wrap:wrap}
+    .sticky-buy{
+      display:none;position:fixed;left:12px;right:12px;bottom:12px;z-index:30;
+      background:#fff;border:1px solid var(--line);border-radius:18px;padding:10px;
+      box-shadow:0 16px 40px rgba(11,31,58,.20)
+    }
+    .sticky-buy .btn{width:100%}
+    @media(max-width:820px){
+      .hero-grid{grid-template-columns:1fr}
+      .phone{max-width:350px}
+      .features,.steps{grid-template-columns:1fr}
+      .hero{padding-top:48px}
+      .topbar .btn{display:none}
+      .foot-grid{grid-template-columns:1fr}
+      .sticky-buy{display:block}
+      footer{padding-bottom:100px}
+    }
+  </style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap inner">
+    <div class="brand">
+      <div class="logo">MF</div>
+      <div>Minhas Finanças</div>
+    </div>
+    <a class="btn primary" href="https://pauloh123f.github.io/minhas-financas/">Abrir o app</a>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow">Controle financeiro simples e direto</span>
+        <h1>Saiba para onde seu dinheiro está indo.</h1>
+        <p>Organize entradas, gastos, dívidas, metas, cartões e compromissos em um só lugar — sem planilhas complicadas e sem precisar conectar sua conta bancária.</p>
+        <div class="hero-actions">
+          <a class="btn primary" href="https://pauloh123f.github.io/minhas-financas/">Começar por R$ 9,90/mês</a>
+          <a class="btn light" href="#recursos">Ver recursos</a>
+        </div>
+        <div class="trust">
+          <span>✓ Pagamento via Mercado Pago</span>
+          <span>✓ Assinatura mensal</span>
+          <span>✓ Cancelamento disponível</span>
+        </div>
+      </div>
+
+      <div class="phone" aria-label="Prévia do aplicativo">
+        <div class="screen">
+          <div class="screen-head">
+            <small>Disponível real neste mês</small>
+            <strong>R$ 2.485,00</strong>
+            <small>Visão simples do seu dinheiro</small>
+          </div>
+          <div class="mini-grid">
+            <div class="mini"><small>Entrou</small><b>R$ 5.200</b></div>
+            <div class="mini"><small>Gastei</small><b>R$ 2.715</b></div>
+            <div class="mini"><small>Metas</small><b>3 ativas</b></div>
+            <div class="mini"><small>Dívidas</small><b>2 registradas</b></div>
+          </div>
+          <div class="mock-card">
+            <b>Resumo do mês</b>
+            <div class="bar"><span></span></div>
+            <small style="color:#667085">Acompanhe seu progresso de forma visual.</small>
+          </div>
+          <div class="mock-card">
+            <b>Posso gastar?</b>
+            <p style="margin:7px 0 0;color:#667085;font-size:13px">Veja quanto sobra depois dos compromissos antes de decidir uma compra.</p>
+          </div>
+          <div class="mock-card">
+            <b>Próximos compromissos</b>
+            <p style="margin:7px 0 0;color:#667085;font-size:13px">Organize parcelas e contas recorrentes em um só lugar.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="recursos">
+    <div class="wrap">
+      <div class="section-title">
+        <h2>Seu dinheiro mais organizado, sem complicação.</h2>
+        <p>O Minhas Finanças foi pensado para quem quer ter clareza sem passar horas preenchendo planilhas.</p>
+      </div>
+
+      <div class="features">
+        <article class="feature">
+          <div class="ico">💰</div>
+          <h3>Entradas e gastos</h3>
+          <p>Registre o que entra e o que sai e acompanhe o saldo do mês com uma visão simples.</p>
+        </article>
+        <article class="feature">
+          <div class="ico">🎯</div>
+          <h3>Metas financeiras</h3>
+          <p>Crie objetivos e acompanhe o progresso dos aportes até chegar ao valor desejado.</p>
+        </article>
+        <article class="feature">
+          <div class="ico">📉</div>
+          <h3>Dívidas organizadas</h3>
+          <p>Registre dívidas e pagamentos para visualizar melhor sua evolução.</p>
+        </article>
+        <article class="feature">
+          <div class="ico">💳</div>
+          <h3>Cartões e parcelas</h3>
+          <p>Tenha mais clareza sobre compromissos que ainda vão impactar os próximos meses.</p>
+        </article>
+        <article class="feature">
+          <div class="ico">🧮</div>
+          <h3>“Posso gastar?”</h3>
+          <p>Consulte seu cenário antes de uma compra e evite decidir olhando apenas o saldo da conta.</p>
+        </article>
+        <article class="feature">
+          <div class="ico">📦</div>
+          <h3>Backup dos dados</h3>
+          <p>Exporte seus dados para guardar uma cópia e restaurar quando precisar.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap">
+      <div class="section-title">
+        <h2>Começar leva poucos minutos.</h2>
+        <p>Sem conexão bancária obrigatória e sem precisar informar senhas do banco.</p>
+      </div>
+      <div class="steps">
+        <div class="step"><div class="num">1</div><h3>Abra o Minhas Finanças</h3><p>Entre no aplicativo pelo navegador do celular ou computador.</p></div>
+        <div class="step"><div class="num">2</div><h3>Assine o Pro</h3><p>Confira as condições, aceite os termos e conclua o pagamento pelo Mercado Pago.</p></div>
+        <div class="step"><div class="num">3</div><h3>Comece a organizar</h3><p>Use o mesmo e-mail da assinatura para confirmar o acesso e liberar os recursos Pro.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="preco">
+    <div class="wrap">
+      <div class="section-title">
+        <h2>Um preço simples.</h2>
+        <p>Sem plano complicado para escolher.</p>
+      </div>
+      <div class="pricing">
+        <div style="font-weight:900;color:#1769aa">MINHAS FINANÇAS PRO</div>
+        <div class="price">R$ 9,90 <small>/mês</small></div>
+        <div class="checks">
+          <div class="check"><span class="tick">✓</span><span>Controle de entradas e gastos</span></div>
+          <div class="check"><span class="tick">✓</span><span>Metas, dívidas, cartões e compromissos</span></div>
+          <div class="check"><span class="tick">✓</span><span>Resumo mensal e ferramenta “Posso gastar?”</span></div>
+          <div class="check"><span class="tick">✓</span><span>Backup dos seus dados</span></div>
+          <div class="check"><span class="tick">✓</span><span>Assinatura mensal recorrente via Mercado Pago</span></div>
+        </div>
+        <a class="btn primary" href="https://pauloh123f.github.io/minhas-financas/">Quero organizar minhas finanças</a>
+        <div class="note">As condições de contratação, cancelamento, privacidade e termos são apresentadas no aplicativo antes da assinatura.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="section-title">
+        <h2>Perguntas frequentes</h2>
+      </div>
+      <div class="faq">
+        <details>
+          <summary>Preciso conectar minha conta bancária?</summary>
+          <p>Não. O Minhas Finanças funciona sem solicitar senha bancária e sem conexão automática com suas contas.</p>
+        </details>
+        <details>
+          <summary>Onde ficam os meus dados financeiros?</summary>
+          <p>Nesta versão, os dados financeiros registrados no aplicativo ficam armazenados localmente no navegador do aparelho. Por isso, recomendamos exportar backups regularmente.</p>
+        </details>
+        <details>
+          <summary>Como funciona o pagamento?</summary>
+          <p>A assinatura custa R$ 9,90 por mês e o pagamento é processado pelo Mercado Pago.</p>
+        </details>
+        <details>
+          <summary>Posso cancelar?</summary>
+          <p>Sim. As orientações de cancelamento e atendimento ficam disponíveis dentro do aplicativo.</p>
+        </details>
+        <details>
+          <summary>O aplicativo substitui orientação financeira profissional?</summary>
+          <p>Não. O Minhas Finanças é uma ferramenta de organização pessoal baseada nos dados inseridos pelo próprio usuário e não substitui aconselhamento financeiro, contábil, jurídico ou de investimentos.</p>
+        </details>
+        <details>
+          <summary>Como falar com o suporte?</summary>
+          <p>O atendimento é feito pelo e-mail paulo_segmed@hotmail.com.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section style="padding-top:20px">
+    <div class="wrap">
+      <div class="cta">
+        <h2>Comece a ter mais clareza sobre seu dinheiro.</h2>
+        <p>Organize suas finanças em um só lugar e acompanhe seu mês com uma visão simples e objetiva.</p>
+        <a class="btn" href="https://pauloh123f.github.io/minhas-financas/">Começar agora por R$ 9,90/mês</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot-grid">
+    <div>
+      <b style="color:#0b1f3a">Minhas Finanças</b><br>
+      Responsável: Fabiane Basso<br>
+      Suporte: paulo_segmed@hotmail.com<br><br>
+      <span>© 2026 Minhas Finanças. Todos os direitos reservados.</span>
+    </div>
+    <div class="foot-links">
+      <a href="https://pauloh123f.github.io/minhas-financas/">Abrir aplicativo</a>
+      <a href="mailto:paulo_segmed@hotmail.com">Suporte</a>
+    </div>
+  </div>
+</footer>
+
+<div class="sticky-buy">
+  <a class="btn primary" href="https://pauloh123f.github.io/minhas-financas/">Começar — R$ 9,90/mês</a>
+</div>
+
+</body>
+</html>
